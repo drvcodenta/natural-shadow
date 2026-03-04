@@ -10,3 +10,5 @@ its a shadow platform to manage AI agents spending before they hook up a real ba
 When the agent calls pay_invoice(amount, recipient), this SDK doesn't call the bank. It sends a JSON payload to your Shadow Dashboard and checks it against a Mock Policy
 
 #### 2. dashboard
+
+more details inside PRODUCT.md
