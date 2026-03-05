@@ -6,16 +6,42 @@ Run this script while the Shadow Dashboard is running at localhost:3000
 to see agent attempts appear in the live feed.
 
 Usage:
-    python demo.py
+    python demo.py              # clears dashboard, then sends entries with delays
+    python demo.py --no-clear   # keeps existing data, appends new entries
 """
+
+import sys
+import time
+
+try:
+    import requests
+except ImportError:
+    print("ERROR: 'requests' package is required. Install with: pip install requests")
+    sys.exit(1)
 
 from natural_shadow import NaturalShadow
 
+DASHBOARD_URL = "http://localhost:3000"
+
+
+def clear_dashboard():
+    """Clear all existing logs from the dashboard."""
+    try:
+        resp = requests.delete(f"{DASHBOARD_URL}/api/log", timeout=5)
+        if resp.status_code == 200:
+            print("  ✓ Dashboard cleared — starting fresh\n")
+        else:
+            print(f"  ⚠ Could not clear dashboard (status {resp.status_code})\n")
+    except Exception as exc:
+        print(f"  ⚠ Dashboard unreachable ({exc}) — is it running at {DASHBOARD_URL}?\n")
+
 
 def main():
+    no_clear = "--no-clear" in sys.argv
+
     # Initialize the shadow ledger
     shadow = NaturalShadow(
-        dashboard_url="http://localhost:3000",
+        dashboard_url=DASHBOARD_URL,
         policy_limits={
             "max_per_tx": 1000,
             "daily_limit": 5000,
@@ -92,14 +118,26 @@ def main():
         },
     ]
 
+    print()
     print("=" * 60)
     print("  NATURAL SHADOW — Agent Spending Simulation")
     print("=" * 60)
     print()
 
+    # Clear dashboard before starting (unless --no-clear flag is set)
+    if not no_clear:
+        print("  Clearing dashboard...")
+        clear_dashboard()
+
+    print(f"  Sending {len(test_calls)} agent attempts (3s delay between each)")
+    print(f"  Watch the dashboard at {DASHBOARD_URL}")
+    print()
+    print("-" * 60)
+    print()
+
     for i, call in enumerate(test_calls, 1):
         args = call["arguments"]
-        print(f"[{i}] {call['tool']}  →  ${args['amount']:,.2f}  →  {args['recipient']}")
+        print(f"  [{i}/{len(test_calls)}]  {call['tool']}  →  ${args['amount']:,.2f}  →  {args['recipient']}")
 
         result = shadow.gatekeeper(call)
 
@@ -109,18 +147,26 @@ def main():
             "FLAGGED": "⚠️",
         }.get(result["status"], "❓")
 
-        print(f"    {status_icon}  {result['status']}  (risk: {result['risk_score']}/100)")
-        print(f"    → {result['reason']}")
+        print(f"          {status_icon}  {result['status']}  (risk: {result['risk_score']}/100)")
+        print(f"          → {result['reason']}")
         print()
 
-    print("=" * 60)
-    print(f"  Total attempts: {len(shadow.history)}")
+        # Wait between calls for dramatic demo effect
+        if i < len(test_calls):
+            time.sleep(3)
+
+    print("-" * 60)
+    print()
+    print(f"  ✓ Demo complete!")
+    print(f"    Total attempts: {len(shadow.history)}")
     approved = sum(1 for h in shadow.history if h["decision"] == "SIMULATED_SUCCESS")
     blocked = sum(1 for h in shadow.history if h["decision"] == "BLOCKED")
     flagged = sum(1 for h in shadow.history if h["decision"] == "FLAGGED")
-    print(f"  Approved: {approved}  |  Blocked: {blocked}  |  Flagged: {flagged}")
+    print(f"    Approved: {approved}  |  Blocked: {blocked}  |  Flagged: {flagged}")
+    print()
     print("=" * 60)
 
 
 if __name__ == "__main__":
     main()
+
